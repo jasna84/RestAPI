@@ -66,8 +66,9 @@ app.post('/home/register', function(req, res) {
         User.createUser(newUser, function(err, user) {
             if (err) {
                 res.json({ success: false, msg: 'Username already exists.' });
-            }
+            } else {
             res.json({ success: true, msg: 'Successfully created new user.' });
+            }
         });
     }
 });
