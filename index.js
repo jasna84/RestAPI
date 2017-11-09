@@ -4,10 +4,19 @@ var bodyParser = require('body-parser');
 var morgan = require('morgan');
 var mongoose = require('mongoose');
 var jwt = require('jsonwebtoken');
+//var passport = require("passport");
+//var passportJWT = require("passport-jwt");
+var bcrypt = require('bcryptjs');
 var config = require('./config');
 var User = require('./user');
-const url = 'mongodb://localhost/probna2';
+
+//configuration
+
+const url = 'mongodb://localhost/testPassport';
 var port = process.env.PORT || 3000;
+app.set('superSecret', config.secret);
+
+//connection with the database
 
 mongoose.connect(url, { useMongoClient: true });
 var db = mongoose.connection;
@@ -20,14 +29,16 @@ db.once('open', function callback() {
     console.info('Mongo db connected successfully on ', url);
 });
 
-app.set('superSecret', config.secret);
+// use body parser so we can get info from POST and/or URL parameters
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+// use morgan to log requests to the console
+
 app.use(morgan('dev'));
 
-// basic routes
+// unprotected routes
 
 app.get('/', function(req, res) {
     res.send('Hello! Please proceed to http://localhost:' + port + '/home');
@@ -36,6 +47,8 @@ app.get('/', function(req, res) {
 app.get('/home', function(req, res) {
     res.send('Please register at http://localhost:' + port + '/home/register' + ' or login at http://localhost:' + port + '/home/login');
 });
+
+//create a new user, unprotected route 
 
 app.post('/home/register', function(req, res) {
 
@@ -48,25 +61,24 @@ app.post('/home/register', function(req, res) {
             password: req.body.password
         });
 
-        // save the user
-        newUser.save(function(err) {
-            console.log(err);
+        // save the new user
+
+        User.createUser(newUser, function(err, user) {
             if (err) {
                 res.json({ success: false, msg: 'Username already exists.' });
             }
             res.json({ success: true, msg: 'Successfully created new user.' });
         });
     }
-
 });
 
-// protected routes
+// create a router
 
 var routes = express.Router();
 
 routes.post('/home/login', function(req, res) {
 
-    // find the user
+    // find the user, if they exist issue a token
 
     User.findOne({
         username: req.body.username
@@ -79,9 +91,7 @@ routes.post('/home/login', function(req, res) {
             res.json({ success: false, message: 'Authentication failed. User not found.' });
         } else if (user) {
 
-            if (user.password != req.body.password) {
-                res.json({ success: false, message: 'Authentication failed. Wrong password.' });
-            } else {
+            if (bcrypt.compareSync(req.body.password, user.password)) {
 
                 const payload = {
                     admin: user.admin
@@ -89,19 +99,21 @@ routes.post('/home/login', function(req, res) {
 
                 var token = jwt.sign(payload, app.get('superSecret'), {
                     expiresIn: 60 * 60 * 24
+
                 });
 
                 res.json({
                     success: true,
-                    message: 'Enjoy your token!',
                     token: token
                 });
-            }
-        }
 
+            } else {
+                res.json({ success: false, message: 'Authentication failed. Wrong password.' });
+            }
+
+        };
     });
 });
-
 // route middleware to verify a token
 
 routes.use(function(req, res, next) {
@@ -129,11 +141,15 @@ routes.use(function(req, res, next) {
     }
 });
 
+//protected route, access with token only
+
 routes.get('/home/login/secret', function(req, res) {
     res.json({ message: 'Congrats, you sucesfully used your token' });
 });
 
 app.use('/', routes);
+
+//start the server
 
 app.listen(port);
 console.log('Server is running on http://localhost:' + port);
