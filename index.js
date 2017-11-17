@@ -4,8 +4,6 @@ var bodyParser = require('body-parser');
 var morgan = require('morgan');
 var mongoose = require('mongoose');
 var jwt = require('jsonwebtoken');
-//var passport = require("passport");
-//var passportJWT = require("passport-jwt");
 var bcrypt = require('bcryptjs');
 var config = require('./config');
 var User = require('./user');
@@ -67,7 +65,7 @@ app.post('/home/register', function(req, res) {
             if (err) {
                 res.json({ success: false, msg: 'Username already exists.' });
             } else {
-            res.json({ success: true, msg: 'Successfully created new user.' });
+                res.json({ success: true, msg: 'Successfully created new user.' });
             }
         });
     }
@@ -90,31 +88,32 @@ routes.post('/home/login', function(req, res) {
         if (!user) {
             console.log(user)
             res.json({ success: false, message: 'Authentication failed. User not found.' });
-        } else if (user) {
+        } else {
+            console.log(user);
+            User.comparePasswords(req.body.password, user.password, function(err, isMatch) {
+                if (isMatch && !err) {
+                    const payload = {
+                        admin: user.admin
+                    };
 
-            if (bcrypt.compareSync(req.body.password, user.password)) {
+                    var token = jwt.sign(payload, app.get('superSecret'), {
+                        expiresIn: 60 * 60 * 24
 
-                const payload = {
-                    admin: user.admin
-                };
+                    });
 
-                var token = jwt.sign(payload, app.get('superSecret'), {
-                    expiresIn: 60 * 60 * 24
+                    res.json({
+                        success: true,
+                        token: token
+                    });
 
-                });
-
-                res.json({
-                    success: true,
-                    token: token
-                });
-
-            } else {
-                res.json({ success: false, message: 'Authentication failed. Wrong password.' });
-            }
-
-        };
+                } else {
+                    res.json({ success: false, message: 'Authentication failed. Wrong password.' });
+                }
+            });
+        }
     });
 });
+
 // route middleware to verify a token
 
 routes.use(function(req, res, next) {
